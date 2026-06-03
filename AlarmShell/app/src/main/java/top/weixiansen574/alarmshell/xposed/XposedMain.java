@@ -11,7 +11,7 @@ import java.text.SimpleDateFormat;
 import java.util.Locale;
 
 import io.github.libxposed.api.XposedModule;
-import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
+import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam;
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam;
 
 public class XposedMain extends XposedModule {
@@ -19,11 +19,11 @@ public class XposedMain extends XposedModule {
 
     @Override
     public void onModuleLoaded(ModuleLoadedParam param) {
-        Log.i(TAG, "Module loaded");
+        log(Log.INFO, TAG, "Module loaded");
     }
 
     @Override
-    public void onPackageLoaded(PackageLoadedParam param) {
+    public void onPackageReady(PackageReadyParam param) {
         if (!param.getPackageName().equals("com.android.deskclock")) {
             return;
         }
@@ -58,24 +58,24 @@ public class XposedMain extends XposedModule {
                             if (shFileName.equals(label)) {
                                 SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
                                 String shFilePath = shFile.getAbsolutePath();
-                                Log.i(TAG, sdf.format(System.currentTimeMillis()) + " 执行shell脚本:" + shFilePath);
+                                log(Log.INFO, TAG, sdf.format(System.currentTimeMillis()) + " 执行shell脚本:" + shFilePath);
                                 Thread execThread = new ShellExecThread(shFilePath);
                                 execThread.setName("AlarmShellThread");
                                 execThread.start();
                                 break;
                             } else {
-                                Log.i(TAG, "闹钟已响，但是没有对应的sh文件：" + label);
+                                log(Log.INFO, TAG, "闹钟已响，但是没有对应的sh文件：" + label);
                             }
                         }
                     } catch (Exception e) {
-                        Log.e(TAG, "Failed to get alarm label", e);
+                        log(Log.ERROR, TAG, "Failed to get alarm label", e);
                     }
                 }
 
                 return result;
             });
         } catch (Throwable t) {
-            Log.e(TAG, "Failed to hook AlarmAlertFullScreenActivity: " + t.getMessage());
+            log(Log.ERROR, TAG, "Failed to hook AlarmAlertFullScreenActivity: " + t.getMessage());
         }
     }
 }
