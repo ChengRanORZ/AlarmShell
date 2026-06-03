@@ -3,22 +3,23 @@ package top.weixiansen574.alarmshell.xposed;
 import android.app.Activity;
 import android.os.Bundle;
 import android.os.Parcelable;
+import android.util.Log;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
 import java.util.Locale;
 
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam;
-import io.github.libxposed.api.hooks.Chain;
-import io.github.libxposed.api.hooks.MethodHooker;
 
 public class XposedMain extends XposedModule {
+    private static final String TAG = "AlarmShell";
 
     @Override
     public void onModuleLoaded(ModuleLoadedParam param) {
-        // Module loaded
+        Log.i(TAG, "Module loaded");
     }
 
     @Override
@@ -30,47 +31,51 @@ public class XposedMain extends XposedModule {
         ClassLoader classLoader = param.getClassLoader();
         try {
             Class<?> alarmAlertClass = classLoader.loadClass("com.android.deskclock.alarm.alert.AlarmAlertFullScreenActivity");
-            hookMethod(alarmAlertClass.getMethod("onCreate", Bundle.class), new AlarmHooker());
-        } catch (Throwable t) {
-            log("Failed to hook AlarmAlertFullScreenActivity: " + t.getMessage());
-        }
-    }
+            hook(alarmAlertClass.getMethod("onCreate", Bundle.class)).intercept(chain -> {
+                Object result = chain.proceed();
 
-    private class AlarmHooker implements MethodHooker {
-        @Override
-        public void after(Chain chain) throws Throwable {
-            Activity activity = (Activity) chain.getThisObject();
-            Parcelable alarm = activity.getIntent().getParcelableExtra("intent.extra.alarm");
-            if (alarm != null) {
-                String label = (String) getXposedInterface().getObjectField(alarm, "label");
-                File shellDir = new File("/data/user/0/com.android.deskclock/files/shell/");
-                if (!shellDir.exists()) {
-                    shellDir.mkdirs();
-                }
-                if (label == null) {
-                    return;
-                }
+                Activity activity = (Activity) chain.getThisObject();
+                Parcelable alarm = activity.getIntent().getParcelableExtra("intent.extra.alarm");
+                if (alarm != null) {
+                    try {
+                        Field labelField = alarm.getClass().getField("label");
+                        String label = (String) labelField.get(alarm);
 
-                File[] shFiles = shellDir.listFiles();
-                if (shFiles == null) {
-                    return;
-                }
-                for (File shFile : shFiles) {
-                    String shFileName = shFile.getName();
-                    if (shFileName.equals(label)) {
-                        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
-                        String shFilePath = shFile.getAbsolutePath();
-                        log(sdf.format(System.currentTimeMillis()) + " 执行shell脚本:" + shFilePath);
-                        Thread execThread = new ShellExecThread(shFilePath);
-                        execThread.setName("AlarmShellThread");
-                        execThread.start();
-                        break;
-                    } else {
-                        log("闹钟已响，但是没有对应的sh文件：" + label);
+                        File shellDir = new File("/data/user/0/com.android.deskclock/files/shell/");
+                        if (!shellDir.exists()) {
+                            shellDir.mkdirs();
+                        }
+                        if (label == null) {
+                            return result;
+                        }
+
+                        File[] shFiles = shellDir.listFiles();
+                        if (shFiles == null) {
+                            return result;
+                        }
+                        for (File shFile : shFiles) {
+                            String shFileName = shFile.getName();
+                            if (shFileName.equals(label)) {
+                                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+                                String shFilePath = shFile.getAbsolutePath();
+                                Log.i(TAG, sdf.format(System.currentTimeMillis()) + " 执行shell脚本:" + shFilePath);
+                                Thread execThread = new ShellExecThread(shFilePath);
+                                execThread.setName("AlarmShellThread");
+                                execThread.start();
+                                break;
+                            } else {
+                                Log.i(TAG, "闹钟已响，但是没有对应的sh文件：" + label);
+                            }
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Failed to get alarm label", e);
                     }
                 }
-            }
-            chain.proceed();
+
+                return result;
+            });
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed to hook AlarmAlertFullScreenActivity: " + t.getMessage());
         }
     }
 }
